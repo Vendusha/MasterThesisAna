@@ -110,9 +110,8 @@ def load_folder_basic(folder):
                         y[i]=y[i]+a[i].y
                     t_livetime[i]=t_livetime[i]+a[i].live_time
     for i in range(0,4):
-        if (t_livetime[i]!=0):
-            integral[i]=integral[i]/t_livetime[i]
-            error[i]=np.sqrt(integral[i])/t_livetime[i]
+        integral[i]=integral[i]/t_livetime[i]
+        error[i]=np.sqrt(integral[i])/t_livetime[i]
     return(t_array_real,t_livetime,x,y,t,mu_0,integral,a,error)
 def FWHM_plot(folder):
     FWHM=[]
@@ -285,8 +284,8 @@ if __name__ == "__main__":
         "Pass the calibration folder"
     )
     parser.add_argument(
-        "-other",
-        "--other",
+        "-fwhm",
+        "--fwhm",
         help=
         "Pass the asc folder"
     )
@@ -304,8 +303,8 @@ if __name__ == "__main__":
     if (args.folder!=None):
         detector="He"
         (t_array_real,integral,x,y,t_livetime,mu_0,a,VND_int,HZB_BM_int,folder_Name,error_HZB,error_VND)=load_folder(args.folder,detector)
-        (t_array_real_noV,integral_noV,x_noV,y_noV,t_livetime_noV,mu_0_noV,a_noV,VND_int_noV,HZB_BM_int_noV,folder_Name_noV,error_HZB_noV,error_VND_noV)=load_folder(args.background,detector)
-        # (t_array_real_full,integral_full,x_full,y_full,t_livetime_full,mu_0_full,a_full,VND_int_full,HZB_BM_int_full,folder_Name_full,error_HZB_full,error_VND_full)=load_folder(args.other,detector)
+        # (t_array_real_noV,integral_noV,x_noV,y_noV,t_livetime_noV,mu_0_noV,a_noV,VND_int_noV,HZB_BM_int_noV,folder_Name_noV,error_HZB_noV,error_VND_noV)=load_folder(args.background,detector)
+
         plt.figure()
         for i in range(0, 4):
             plt.plot(x[i],y[i]/t_livetime[i])
@@ -316,31 +315,41 @@ if __name__ == "__main__":
         # VND_int-=VND_int_noV
         ######################################Kelly's graph##################
         # plt.figure()
-        # # z=[5,10,13,15,18,25,30] ##for the data with varying the slit
-        # z=[5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23] ##for the other data
-        # z1=[5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23] ##for the other data
-        l=[2,5,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
-        z=[5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
-        # l=[5,8,11,14,17,20,22]
-        # l=[5,7,9,10,11,13,14,15,16,17,19,21,22]
-        fig,ax1=plt.subplots()
-        ax1.set_ylabel("Vanadium BM uncorrected [n/s]")
-        for i in range(0, 1):
-            plt.errorbar(l,VND_int[:,i],yerr=error_VND[:,i],fmt='x')
-            plt.errorbar(z,VND_int_noV[:,i],yerr=error_VND_noV[:,i], fmt='o')
-        # for i in range(0, 4):
-            # plt.errorbar(l,VND_int_full[:,i],yerr=error_VND_full[:,i],fmt='o')
-        plt.xlabel("Chopper opening [degree] (flux regulation)")
-        # plt.legend(["Counts on the Helium tubes (V monitor)"],loc="upper left")
-        plt.legend(["Counts when the Vanadium is present","Counts when the Vanadium is not present"])
-        # plt.title("Counts on Helium Tubes as dependent on the ")
-        # plt.savefig('V-monitor_foreground/background.png')
+        z=[5,10,13,15,18,25,30] ##for the data with varying the slit
 
-        ################################BASIC DEPENDENCY GRAPH corrected ######################
+
+        plt.figure()
+        thickness=[0.02,0.04,0.125,0.2,1,3.15,25]
+        plt.plot(thickness,VND_int[:,i],'x')
+        # plt.plot(thickness,HZB_BM_int,'x')
+        plt.legend(["VND"])
+        plt.xlabel("Thickness of the Vanadium foil")
+
+
+        # plt.figure()
+        # z=[5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23] ##for the other data
+        # opening1=[14,16,18,20]
+        # for i in range(0,4):
+        #     plt.plot(z, VND_int[:,i],'x')
+        #     plt.plot(opening1, VND_int_noV[:,i],'x')
+        # plt.legend(["channel1","channel1 no HZB monitor","channel2","channel2 no HZB monitor","channel3","channel3 no HZB monitor", "channel4", "channel4 no HZB monitor"])
+        # plt.title ("Comparison of counts on the He-detectors as dependent on the chopper when HZB BM present")
+        # plt.xlabel("Chopper opening [degree]")
+        # plt.ylabel("Counts on He-tubes")
+
+
+
+        # fig,ax1=plt.subplots()
+        # ax1.set_ylabel("Vanadium BM n/s")
+        # for i in range(0, 4):
+        #     plt.errorbar(z,VND_int[:,i],yerr=error_VND[:,i],fmt='x')
+        #     # plt.errorbar(z,VND_int_noV[:,i],yerr=error_VND_noV[:,i], fmt='x')
+        # plt.xlabel("Chopper opening [degree]")
+        # ################################BASIC DEPENDENCY GRAPH corrected ######################
         # ax2=ax1.twinx()
-        # ax2.set_ylabel("HZB BM uncorrected [n/s]")
-        # plt.plot(z,HZB_BM_int_noV,"x",color="red")
-        # plt.legend(["Counts on HZB_referrence_monitor"],loc="lower right" )
+        # ax2.set_ylabel("HZB BM [n/s]")
+        # plt.errorbar(z,HZB_BM_int_noV,yerr=error_HZB_noV,fmt='+',)
+        # plt.legend(["Channel1","Channel2","Channel3","Channel4","HZB_referrence_monitor"] )
         # plt.title("Scan"+args.folder+"the referrence monitor with the Vanadium Out, relative counts")
 
         # #############################################Richards graph_corrected###################
