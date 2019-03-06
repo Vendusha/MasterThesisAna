@@ -9,6 +9,7 @@ import copy
 import pdb; 
 import sys
 import os
+import shutil
 import argparse
 import matplotlib
 matplotlib.use('Qt5Agg')  # nice, but issue with interactive use e.g. in
@@ -35,58 +36,9 @@ def log_fit(x, a, b):
 def gauss_function(x, a, x0, sigma):
     return a*np.exp(-(x-x0)**2/(2*sigma**2))
 #plots time vs number of counts: results in the exponential count
-def SumArray(y):
-    y_all=y[0]
-    for item in range (0,len(y)):
-        y_all=y_all+y[item]
-    return(y_all)
-def CalibrationFit(x,y,s):
-    if (s=="He"):    
-        Constants=[0.191,0.764] # the self calibrating points for He tube in MeV
-    else:
-        Constants=[1.330,1.17,0.6617] # the calibration of the Co-60 and Cs-137
-        if (s=="CeBr"):
-            ParameterFit,BoundaryMin,BoundaryMax,BoundaryMaxWide=[1096,966,533],[1072,924,500],[1118,980,570],[30,20,20]
-        elif(s=="LaBr"):
-            ParameterFit,BoundaryMin,BoundaryMax,BoundaryMaxWide=[555,485,276],[542,473,250],[573,500,980],[20,20,25]
-    Gaussian_Fit=[]
-    y_all=SumArray(y)
-    plt.figure()
-    plt.plot(x[0],y_all);
-    f = open("datacalib", "w")
-    f.write("# x y \n ")        # column names
-    np.savetxt(f, np.array([x[0],y_all]).T)
-    x_base=x[0];
-    if (s=="He"):
-        Gaussian_Fit.append(720+np.argmax(y_all[800:1400]))
-        Gaussian_Fit.append(3990+np.argmax(y_all[4000:6000]))
-        print ("Gaussian Fit")
-        print (Gaussian_Fit);
-    else:
-        for i in range (0,len(Constants)):
-            popt, pcov = curve_fit(gauss_function,x_base[BoundaryMin[i]:BoundaryMax[i]],y_all[BoundaryMin[i]:BoundaryMax[i]], p0 = [6000, ParameterFit[i], 7]) #popt[1] the middle of the Gaussian, popt[2] is the sigma, popt[0] is the multiplication He-Tube
-        plt.plot(x_base, gauss_function(x[0],popt[0],popt[1],popt[2]));
-        Gaussian_Fit.append(popt[1])
-    scale, intercept, r_value, p_value, std_err = stats.linregress(Gaussian_Fit,Constants)
-    Gaussian_Fit=np.asarray(Gaussian_Fit)
-    Constants=np.asarray(Constants)
-    # plotRoutine(np.array([Gaussian_Fit,Gaussian_Fit]),np.array([Constants,scale*Gaussian_Fit+intercept]),"Channel no. [-]","Energy",["Data","Fit"],np.array([0,0]),"Calibration")
-    plt.figure()
-    plt.plot(Gaussian_Fit,Constants,'x',Gaussian_Fit,scale*Gaussian_Fit+intercept)
-    return(scale,intercept)
-
-def plotRoutine(xPlotArray,yPlotArray,xlabel,ylabel,legendPlotArray,errorPlotArray,title):
-    plt.figure()
-    for i in range(len(xPlotArray)):
-        # print (xPlotArray[i])
-        plt.errorbar(xPlotArray[i],yPlotArray[i],yerr=errorPlotArray[i]);               #plot the data
-    plt.title(title)
-    plt.legend(legendPlotArray)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    # plt.yscale("log")
 def load_folder_basic(folder):
     t_array_real=[[],[],[],[]] # here we store the time after each files
+    Counts=[[],[],[],[]]
     t_livetime=[0,0,0,0] # initializing the array of the livetimes of each of the measurements
     integral=[0,0,0,0] # here we store the total number of events in each file
     error=[0,0,0,0] # here we store the total number of events in each file
@@ -95,93 +47,83 @@ def load_folder_basic(folder):
     y=[[],[],[],[]] # array of arrays for the count values
     t=[0,0,0,0]; # initializing time 0 of the beginning of the first measurment
     mu_0=[[],[],[],[]]; # array of arrays for the mu_0 values
+    slits=["15x15","14x14","13x13","12x12","11x11","10x10","9x9","8x8","7x7","6x6","5x5","4x4","3x3","2x2","1x1"]
+    k=0
+    m=0
     for id, file in  enumerate(sorted(glob.glob("./"+folder+"/*.mpa"), key=numericalSort)): #looping through the folder
-                a=read_mca.read_mca(file)
+            a=read_mca.read_mca(file)
+            currentCounts=a[1].int
+            if (id!=0 and (currentCounts<pastCounts-6*np.sqrt(pastCounts)) and newStep==0):
+                print (currentCounts-(pastCounts-2*np.sqrt(pastCounts)))
+                print("Breaking cycle")
+                os.remove(file)
+                newStep=1
+                f = open(slits[k], "w")
+                f.write("#t_livetime \n")
+                np.savetxt(f, t_livetime, newline=" ")
+                f.write("\n #  x,y[0],y[1],y[2],y[3] \n")# column names
+                plt.figure()
                 for i in range(0,4):
+                    plt.plot(np.arange(len(Counts[i])),Counts[i],"x")
+                for i in range(0,4):
+                    np.savetxt(f,np.array([x[0],y[0],y[1],y[2],y[3]]).T)
+                k+=1
+                x=[[],[],[],[]] # array of arrays for the channel values
+                y=[[],[],[],[]] # array of arrays for the count values
+                t_livetime=[0,0,0,0]
+                # Counts=[[],[],[],[]]
+            else:
+                for i in range(0,4):
+                    Counts[i].append(a[i].int)
                     for j in range(0,5):
                         a[i].rebin_factor2(5)
                     t[i]=t[i]+a[i].real_time;
                     t_array_real[i].append(t[i]);
                     integral[i]+=a[i].int;
-                    if (id==0):
+                    if (id==0 or newStep==1):
                         x[i]=np.append(x[i],a[i].x)
                         y[i]=np.append(y[i],a[i].y)
                     else:
                         y[i]=y[i]+a[i].y
                     t_livetime[i]=t_livetime[i]+a[i].live_time
+                newStep=0;
+                # m+=1
+            pastCounts=currentCounts
+            print(currentCounts)
     for i in range(0,4):
         integral[i]=integral[i]/t_livetime[i]
         error[i]=np.sqrt(integral[i])/t_livetime[i]
-    return(t_array_real,t_livetime,x,y,t,mu_0,integral,a,error)
-def FWHM_plot(folder):
-    FWHM=[]
-    for file in (sorted(glob.glob("./"+folder+"/*.asc"))):
-        a=read_mca.read_mca(file)
-        maximum=np.max(a.y)
-        index=np.where(a.y==maximum)
-        # maximum=argmax(a.y)
-        popt, pcov = curve_fit(gauss_function,a.x,a.y, p0 = [1000, maximum, 50]) #popt[1] the middle of the Gaussian, popt[2] is the sigma, popt[0] is the multiplication He-Tube
-        plt.plot(a.x,a.y)
-        plt.plot(a.x,gauss_function(a.x,popt[0],popt[1],popt[2]) )
-        FWHM.append(popt[1])
-    return(FWHM)
-    
-    plt.plot()
-def load_folder(folder,s): # goes through the folder, loads all the files, extracts the live times and plots the number of events over the live times
-    integral_HZB_BM=[]
-    error_HZB_BM=[]
-    folder_Name=[]
-    integral_VND_BM=[]
-    error_VND_BM=[]
-    t_array_real=[[],[],[],[]] # here we store the time after each files
-    t_livetime=[0,0,0,0] # initializing the array of the livetimes of each of the measurements
-    integral=[0,0,0,0] # here we store the total number of events in each file
+    return(t_array_real,t_livetime,x,y,t,mu_0,integral,a,error,Counts)
+
+def load_folder_basic_FC(folder):
+    t_array_real=[] # here we store the time after each files
+    Counts=[]
+    t_livetime=0 # initializing the array of the livetimes of each of the measurements
+    integral=0 # here we store the total number of events in each file
+    error=[0] # here we store the total number of events in each file
     integralPeak=[]
-    x=[[],[],[],[]] # array of arrays for the channel values
-    y=[[],[],[],[]] # array of arrays for the count values
-    t=[0,0,0,0]; # initializing time 0 of the beginning of the first measurment
-    mu_0=[[],[],[],[]]; # array of arrays for the mu_0 values
-    if (s=="He"):
-        p=[6000,7230,80]
-    elif (s=="LaBr"):
-        p=[50,604,14]
-    elif (s=="CeBr"):
-        p=[10,1180,35]
-    Flux_graph_length_data=0
-    for idx,folder_file in enumerate(sorted(glob.glob("./"+folder+"/*"))):
-        # if os.path.splitext(file)[1] == ".mp3":
-        if (os.path.splitext(folder_file)[1]!=".asc"):
-            print("I loop here")
-            print(folder_file)
-            folder_Name.append(folder_file)
-            for LookFolder in (sorted(glob.glob("./"+folder+"/*"))):
-                if (LookFolder==folder_file+".asc"):
-                    HZB_BM_data=read_mca.read_mca(LookFolder)
-                    integral_HZB_BM.append(HZB_BM_data.int)
-                    error_HZB_BM.append(HZB_BM_data.error_total)
-                    print ("found match")
-                    Flux_graph_length_data+=1
-                    break
-            (t_array_real,t_livetime,x,y,t,mu_0,integral,a,error_VND)=load_folder_basic(folder_file)
-            # plt.figure()
-            # for i in range (0,4):
-            #     plt.plot(x[i],y[i])
-            integral_VND_BM.append(integral)
-            error_VND_BM.append(error_VND)
-        # if (s=="He"):
-        #     mu_0.append(np.argmax(4000+a.y[4000:6000]))
-        # else:
-        #     try:
-        #         a.Gaussian_fit(p[0],p[1],p[2])
-        #         mu_0.append(a.mu_0)
-        #         integralPeak.append(a.gauss_int)
-        #     except RuntimeError:
-        #         break
-     # np.concatenate(np.asarray(integral_VND_BM),np.asarray(integral_Total))
-    integral_VND_BM=np.asarray(integral_VND_BM)
-    error_VND_BM=np.asarray(error_VND_BM)
-    error_HZB_BM=np.asarray(error_HZB_BM)
-    return(t_array_real,integral,x,y,t_livetime,mu_0,a,integral_VND_BM,integral_HZB_BM,folder_Name,error_HZB_BM,error_VND_BM)
+    x=[] # array of arrays for the channel values
+    y=[] # array of arrays for the count values
+    t=0; # initializing time 0 of the beginning of the first measurment
+    mu_0=[]; # array of arrays for the mu_0 values
+    for id, file in  enumerate(sorted(glob.glob("./"+folder+"/*.mca"), key=numericalSort)): #looping through the folder
+                a=read_mca.read_mca(file)
+                for j in range(0,5):
+                        a.rebin_factor2(5)
+                t=t+a.real_time;
+                t_array_real.append(t);
+                Counts.append(a.int)
+                integral+=a.int;
+                if (id==0):
+                    x=np.append(x,a.x)
+                    y=np.append(y,a.y)
+                else:
+                    y=y+a.y
+                t_livetime=t_livetime+a.live_time
+    integral=integral/t_livetime
+    error=np.sqrt(integral)/t_livetime
+    return(t_array_real,t_livetime,x,y,t,mu_0,integral,a,error,Counts)
+
 def GainMatch(mu_ref,x,y,mu):
     for i in range(len(y)):
         # print (mu_ref)
@@ -284,8 +226,8 @@ if __name__ == "__main__":
         "Pass the calibration folder"
     )
     parser.add_argument(
-        "-fwhm",
-        "--fwhm",
+        "-other",
+        "--other",
         help=
         "Pass the asc folder"
     )
@@ -302,54 +244,61 @@ if __name__ == "__main__":
     # pdb.set_trace()
     if (args.folder!=None):
         detector="He"
-        (t_array_real,integral,x,y,t_livetime,mu_0,a,VND_int,HZB_BM_int,folder_Name,error_HZB,error_VND)=load_folder(args.folder,detector)
-        # (t_array_real_noV,integral_noV,x_noV,y_noV,t_livetime_noV,mu_0_noV,a_noV,VND_int_noV,HZB_BM_int_noV,folder_Name_noV,error_HZB_noV,error_VND_noV)=load_folder(args.background,detector)
-
+        (t_array_real,t_livetime,x,y,t,mu_0,integral,a,error,Counts)=load_folder_basic(args.folder)
+        # (t_array_real_fc,t_livetime_fc,x_fc,y_fc,t_fc,mu_0_fc,integral_fc,a_fc,error_fc,Counts_fc)=load_folder_basic_fc(args.background)
+        # (t_array_real_other,t_livetime_other,x_other,y_other,t_other,mu_0_other,integral_other,a_other,error_other,Counts_other)=load_folder_basic(args.other)
+        # plt.figure()
+        # plt.plot(x[0],y[0]/t_livetime[0])
+        # plt.plot(x_fc[0],y_fc[0]/t_livetime_fc[0])
+        # plt.plot(x_other[0],y_other[0]/t_livetime_other[0])
+        # print(integral)
+        # print(integral_fc)
+        # print(integral_other)
+        # plt.legend(["Opening 15","Opening 13","Opening 11"])
+        #############################COUNTER#######################
+        
+        b=np.arange(len(Counts[0]))
         plt.figure()
-        for i in range(0, 4):
-            plt.plot(x[i],y[i]/t_livetime[i])
-        plt.legend(["Channel1","Channel2","Channel3","Channel4"] )
-        plt.title(folder_Name)
-        plt.ylabel("n/s")
-        plt.xlabel("Channels[-]")
+        for i in range(0,4):
+            plt.plot(b,Counts[i],'x')
+        plt.legend(["Channel1","Channel2","Channel3","Channel4"])
+        # plt.figure()
+        # plt.plot(t_array_real_fc,Counts_fc,'x')
+        # plt.legend(["fission chamber"])
+        ##########################################
+        # plt.figure()
+        # for i in range(0, 4):
+        #     plt.plot(x[i],y[i]/t_livetime[i])
+        # plt.legend(["Channel1","Channel2","Channel3","Channel4"] )
+        # plt.title(folder_Name)
+        # plt.ylabel("n/s")
+        # plt.xlabel("Channels[-]")
         # VND_int-=VND_int_noV
         ######################################Kelly's graph##################
         # plt.figure()
-        z=[5,10,13,15,18,25,30] ##for the data with varying the slit
-
-
-        plt.figure()
-        thickness=[0.02,0.04,0.125,0.2,1,3.15,25]
-        plt.plot(thickness,VND_int[:,i],'x')
-        # plt.plot(thickness,HZB_BM_int,'x')
-        plt.legend(["VND"])
-        plt.xlabel("Thickness of the Vanadium foil")
-
-
-        # plt.figure()
+        # # z=[5,10,13,15,18,25,30] ##for the data with varying the slit
         # z=[5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23] ##for the other data
-        # opening1=[14,16,18,20]
-        # for i in range(0,4):
-        #     plt.plot(z, VND_int[:,i],'x')
-        #     plt.plot(opening1, VND_int_noV[:,i],'x')
-        # plt.legend(["channel1","channel1 no HZB monitor","channel2","channel2 no HZB monitor","channel3","channel3 no HZB monitor", "channel4", "channel4 no HZB monitor"])
-        # plt.title ("Comparison of counts on the He-detectors as dependent on the chopper when HZB BM present")
-        # plt.xlabel("Chopper opening [degree]")
-        # plt.ylabel("Counts on He-tubes")
-
-
-
+        # z1=[5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23] ##for the other data
+        # l=[5,8,11,14,17,20,22]
+        # l=[5,7,9,10,11,13,14,15,16,17,19,21,22]
         # fig,ax1=plt.subplots()
-        # ax1.set_ylabel("Vanadium BM n/s")
-        # for i in range(0, 4):
+        # ax1.set_ylabel("Vanadium BM uncorrected [n/s]")
+        # for i in range(0, 1):
         #     plt.errorbar(z,VND_int[:,i],yerr=error_VND[:,i],fmt='x')
-        #     # plt.errorbar(z,VND_int_noV[:,i],yerr=error_VND_noV[:,i], fmt='x')
-        # plt.xlabel("Chopper opening [degree]")
+        #     # plt.errorbar(z,VND_int_noV[:,i],yerr=error_VND_noV[:,i], fmt='o')
+        # # for i in range(0, 4):
+        #     # plt.errorbar(l,VND_int_full[:,i],yerr=error_VND_full[:,i],fmt='o')
+        # plt.xlabel("Chopper opening [degree] (flux regulation)")
+        # plt.legend(["Counts on the Helium tubes (V monitor)"],loc="upper left")
+        # # plt.legend(["Counts when the Vanadium is present","Counts when the Vanadium is not present"])
+        # # plt.title("Counts on Helium Tubes as dependent on the ")
+        # # plt.savefig('V-monitor_foreground/background.png')
+
         # ################################BASIC DEPENDENCY GRAPH corrected ######################
         # ax2=ax1.twinx()
-        # ax2.set_ylabel("HZB BM [n/s]")
-        # plt.errorbar(z,HZB_BM_int_noV,yerr=error_HZB_noV,fmt='+',)
-        # plt.legend(["Channel1","Channel2","Channel3","Channel4","HZB_referrence_monitor"] )
+        # ax2.set_ylabel("HZB BM uncorrected [n/s]")
+        # plt.plot(z,HZB_BM_int_noV,"x",color="red")
+        # plt.legend(["Counts on HZB_referrence_monitor"],loc="lower right" )
         # plt.title("Scan"+args.folder+"the referrence monitor with the Vanadium Out, relative counts")
 
         # #############################################Richards graph_corrected###################

@@ -76,7 +76,7 @@ def read_mca(filename):
                 if 'LIVE_TIME' in row[0]:
                     ## this item gives the live_time of the measurement
                     live_time = float(row[0].split(' - ')[1])
-                    m.live_time = duration
+                    m.live_time = live_time
                 if 'START_TIME' in row[0]:
                     log.info('Parsing start time info')
                     m.time = row[0].split(' - ')[1]
